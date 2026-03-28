@@ -1,0 +1,1141 @@
+[
+    {
+        "id": "subflow_auto_ct",
+        "type": "subflow",
+        "name": "Auto CT por sol (HA)",
+        "info": "Ajuste circadiano de temperatura de color para una luz/grupo con autodetección de cambios manuales, pausa automática y recordatorio.\n\nEntradas por variables de entorno del subflow:\n- LIGHT_ENTITY (p.ej. light.salon)\n- AUTO_BOOLEAN (p.ej. input_boolean.auto_temp_salon)\n- FRIENDLY_NAME (texto para mensajes)\n- ACTION_AUTO (opcional, para acciones push)\n- ACTION_KEEP (opcional, para acciones push)\n- NOTIFY_SERVICE (opcional, p.ej. notify.mobile_app_tu_movil)\n- MIN_K (def 2200)\n- MAX_K (def 6200)\n- TRANSITION_SEC (def 2)\n- CT_THRESHOLD (def 10)\n- MANUAL_THRESHOLD (def 20)\n",
+        "in": [
+            {
+                "x": 80,
+                "y": 100,
+                "wires": [
+                    {
+                        "id": "cs_auto_on"
+                    },
+                    {
+                        "id": "012e6d5bc84cf863"
+                    },
+                    {
+                        "id": "34514d71f454a3c0"
+                    }
+                ]
+            }
+        ],
+        "out": [],
+        "env": [
+            {
+                "name": "LIGHT_ENTITY",
+                "type": "str",
+                "value": ""
+            },
+            {
+                "name": "AUTO_BOOLEAN",
+                "type": "str",
+                "value": ""
+            },
+            {
+                "name": "FRIENDLY_NAME",
+                "type": "str",
+                "value": ""
+            },
+            {
+                "name": "ACTION_AUTO",
+                "type": "str",
+                "value": ""
+            },
+            {
+                "name": "ACTION_KEEP",
+                "type": "str",
+                "value": ""
+            },
+            {
+                "name": "NOTIFY_SERVICE",
+                "type": "str",
+                "value": ""
+            },
+            {
+                "name": "MIN_K",
+                "type": "num",
+                "value": 2200
+            },
+            {
+                "name": "MAX_K",
+                "type": "num",
+                "value": 6200
+            },
+            {
+                "name": "TRANSITION_SEC",
+                "type": "num",
+                "value": 2
+            },
+            {
+                "name": "CT_THRESHOLD",
+                "type": "num",
+                "value": 10
+            },
+            {
+                "name": "MANUAL_THRESHOLD",
+                "type": "num",
+                "value": 20
+            }
+        ],
+        "meta": {}
+    },
+    {
+        "id": "cs_auto_on",
+        "type": "api-current-state",
+        "z": "subflow_auto_ct",
+        "name": "¿Auto ON?",
+        "server": "863a80ba.c8027",
+        "version": 3,
+        "outputs": 2,
+        "halt_if": "on",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "${AUTO_BOOLEAN}",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [],
+        "for": "",
+        "forType": "num",
+        "override_topic": false,
+        "x": 170,
+        "y": 160,
+        "wires": [
+            [
+                "cs_light_on"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "cs_light_on",
+        "type": "api-current-state",
+        "z": "subflow_auto_ct",
+        "name": "¿Luz ON?",
+        "server": "863a80ba.c8027",
+        "version": 3,
+        "outputs": 2,
+        "halt_if": "on",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "${LIGHT_ENTITY}",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [],
+        "for": "",
+        "forType": "num",
+        "override_topic": false,
+        "x": 170,
+        "y": 220,
+        "wires": [
+            [
+                "cs_sun"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "cs_sun",
+        "type": "api-current-state",
+        "z": "subflow_auto_ct",
+        "name": "sun.sun",
+        "server": "863a80ba.c8027",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sun.sun",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "payload",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            },
+            {
+                "property": "data",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entity"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "override_topic": false,
+        "x": 380,
+        "y": 160,
+        "wires": [
+            [
+                "ch_set_elev"
+            ]
+        ]
+    },
+    {
+        "id": "ch_set_elev",
+        "type": "change",
+        "z": "subflow_auto_ct",
+        "name": "msg.elev = sun.attributes.elevation",
+        "rules": [
+            {
+                "t": "set",
+                "p": "elev",
+                "pt": "msg",
+                "to": "data.attributes.elevation",
+                "tot": "msg"
+            }
+        ],
+        "x": 460,
+        "y": 220,
+        "wires": [
+            [
+                "fn_calc_ct"
+            ]
+        ]
+    },
+    {
+        "id": "fn_calc_ct",
+        "type": "function",
+        "z": "subflow_auto_ct",
+        "name": "Calcular CT desde elevación",
+        "func": "// Lee parámetros de la curva \"ideal\"\nconst minK = Number(env.get('MIN_K')) || 2200;\nconst maxK = Number(env.get('MAX_K')) || 6200;\nconst transition = Number(env.get('TRANSITION_SEC')) || 2;\nconst threshold = Number(env.get('CT_THRESHOLD')) || 10; // mireds\n\n// 1) Curva ideal -> mireds\nconst elev = Number(msg.elev);\nlet k;\nif (isNaN(elev)) {\n  k = (minK + maxK) / 2;\n} else if (elev <= -6) {\n  k = minK;\n} else if (elev >= 60) {\n  k = maxK;\n} else {\n  const n = (elev + 6) / (60 + 6); // -6..60 -> 0..1\n  k = minK + n * (maxK - minK);\n}\nlet ct = Math.round(k); // Trabajamos directamente en Kelvin\n\n// 2) CLAMP a las capacidades reales\nconst ent = env.get('LIGHT_ENTITY');\nconst evAttrs = msg?.data?.new_state?.attributes || {};\n\n// Ahora el estándar es Kelvin\nlet minK_bulb = evAttrs.min_color_temp_kelvin;\nlet maxK_bulb = evAttrs.max_color_temp_kelvin;\n\n// Fallback al flow si no vienen en el evento\nif (typeof minK_bulb !== 'number') {\n  const r = flow.get(`ctRange.${ent}`);\n  if (r) { minK_bulb = r.min_kelvin; maxK_bulb = r.max_kelvin; }\n}\n\nif (typeof minK_bulb === 'number') {\n  ct = Math.max(minK_bulb, Math.min(maxK_bulb, ct));\n}\n\n// 3) Umbral (threshold) - IMPORTANTE\n// Como ahora 'ct' es Kelvin, un threshold de 10 es muy poco.\n// Cambia la lógica del threshold a algo como 150 Kelvin para no spamear.\nconst prev = context.get('last_ct') || 0;\nif (Math.abs(ct - prev) < 150) return null;\ncontext.set('last_ct', ct);\n\nmsg.data = { color_temp_kelvin: ct, transition }; // Nombre de propiedad actualizado\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 640,
+        "y": 160,
+        "wires": [
+            [
+                "svc_set_ct"
+            ]
+        ]
+    },
+    {
+        "id": "svc_set_ct",
+        "type": "api-call-service",
+        "z": "subflow_auto_ct",
+        "name": "light.turn_on (CT)",
+        "server": "863a80ba.c8027",
+        "version": 7,
+        "debugenabled": false,
+        "action": "light.turn_on",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "${LIGHT_ENTITY}"
+        ],
+        "labelId": [],
+        "data": "{\"color_temp_kelvin\":\"{{data.color_temp_kelvin}}\",\"transition\":\"{{data.transition}}\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "domain": "light",
+        "service": "turn_on",
+        "mergecontext": "",
+        "x": 910,
+        "y": 160,
+        "wires": [
+            [
+                "fn_mark_auto_write"
+            ]
+        ]
+    },
+    {
+        "id": "fn_mark_auto_write",
+        "type": "function",
+        "z": "subflow_auto_ct",
+        "name": "Marcar escritura automática",
+        "func": "flow.set('last_auto_write', Date.now());\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1140,
+        "y": 160,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "fn_detect_manual",
+        "type": "function",
+        "z": "subflow_auto_ct",
+        "name": "Detectar cambio MANUAL",
+        "func": "// Ignora rebotes tras escritura automática (compartido por flow)\nconst suppressMs = 4000;\nconst lastWrite = flow.get('last_auto_write') || 0;\nif (Date.now() - lastWrite < suppressMs) return null;\n\n// Estructuras de estado (soporta msg.data y msg.payload según versión del nodo)\nconst get = (o, p, d = undefined) => p.split('.').reduce((a, k) => (a && a[k] !== undefined) ? a[k] : undefined, o) ?? d;\n\nconst os = get(msg, 'data.old_state') || get(msg, 'payload.old_state') || {};\nconst ns = get(msg, 'data.new_state') || get(msg, 'payload.new_state') || {};\n\nconst oldOn = os.state === 'on';\nconst newOn = ns.state === 'on';\n\n// 1) Ignorar encendido/apagado\nif (!oldOn || !newOn) return null;\n\n// CAMBIO AQUÍ: Ahora buscamos 'color_temp_kelvin'\nconst oldCT = os.attributes?.color_temp_kelvin;\nconst newCT = ns.attributes?.color_temp_kelvin;\n\nconst oldMode = os.attributes?.color_mode;\nconst newMode = ns.attributes?.color_mode;\n\nconst byUser = !!(ns.context && ns.context.user_id);\n\n// AJUSTE DE UMBRAL: \n// 20 mireds es un cambio pequeño, pero 20 Kelvin es imperceptible.\n// Para mantener una sensibilidad similar a la que tenías (20 mireds), \n// un umbral de 200 o 300 Kelvin es más realista.\nconst threshold = Number(env.get('MANUAL_THRESHOLD_KELVIN')) || 250;\n\nlet manual = false;\n\n// 2) Cambio de modo (CT <-> hs/rgb/xy) hecho por usuario\nif (byUser && oldMode && newMode && oldMode !== newMode) manual = true;\n\n// 3) Cambio significativo de CT (Kelvin)\nif (typeof oldCT === 'number' && typeof newCT === 'number') {\n  if (Math.abs(newCT - oldCT) >= threshold) manual = true;\n}\n\n// 4) Si falta CT en alguno\nif ((typeof oldCT !== 'number' || typeof newCT !== 'number') && !(byUser && oldMode && newMode && oldMode !== newMode)) {\n  manual = false;\n}\n\nif (manual) {\n  msg.payload = { reason: byUser ? 'byUser' : 'diff/mode', oldCT, newCT, oldMode, newMode };\n  return msg;\n}\nreturn null;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 220,
+        "y": 540,
+        "wires": [
+            [
+                "svc_auto_off"
+            ]
+        ]
+    },
+    {
+        "id": "svc_auto_off",
+        "type": "api-call-service",
+        "z": "subflow_auto_ct",
+        "name": "input_boolean.turn_off (Auto → Manual)",
+        "server": "863a80ba.c8027",
+        "version": 7,
+        "debugenabled": false,
+        "action": "input_boolean.turn_off",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "${AUTO_BOOLEAN}"
+        ],
+        "labelId": [],
+        "data": "",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "domain": "input_boolean",
+        "service": "turn_off",
+        "mergecontext": "",
+        "x": 640,
+        "y": 480,
+        "wires": [
+            [
+                "cs_timeout"
+            ]
+        ]
+    },
+    {
+        "id": "cs_timeout",
+        "type": "api-current-state",
+        "z": "subflow_auto_ct",
+        "name": "Leer input_number.auto_temp_timeout_min",
+        "server": "863a80ba.c8027",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "input_number.auto_temp_timeout_min",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [],
+        "for": "",
+        "forType": "num",
+        "override_topic": false,
+        "x": 630,
+        "y": 540,
+        "wires": [
+            [
+                "fn_build_reminder"
+            ]
+        ]
+    },
+    {
+        "id": "fn_build_reminder",
+        "type": "function",
+        "z": "subflow_auto_ct",
+        "name": "Preparar recordatorio (+msg.delay)",
+        "func": "const rawId = (env.get('LIGHT_ENTITY') || env.get('FRIENDLY_NAME') || 'auto_ct').toString();\nmsg.notify_id = rawId.replace(/[^a-zA-Z0-9_]/g, '_');\n\n\nconst mins = Number(msg.timeout_state?.state) || 90;\nmsg.delay = mins * 60000; // ms para nodo delay\n\n// Construye textos\nconst name = env.get('FRIENDLY_NAME') || env.get('LIGHT_ENTITY');\nconst actionAuto = env.get('ACTION_AUTO') || '';\nconst actionKeep = env.get('ACTION_KEEP') || '';\n\nmsg.notify = {\n  title: `Temperatura manual en ${name}`,\n  message: `Has cambiado la temperatura de ${name}. ¿Volvemos a modo Auto?\\n\\n- Para volver a Auto: activa el interruptor ${env.get('AUTO_BOOLEAN')}.`,\n  data: {\n    tag: msg.notify_id,\n    actions: actionAuto && actionKeep ? [\n      { action: actionAuto, title: \"Volver a Auto\" },\n    ] : []\n  }\n};\n\nmsg.notify_json = JSON.stringify({\n  title: msg.notify.title,\n  message: msg.notify.message,\n  data: msg.notify.data\n});\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1020,
+        "y": 480,
+        "wires": [
+            [
+                "delay_var"
+            ]
+        ]
+    },
+    {
+        "id": "delay_var",
+        "type": "delay",
+        "z": "subflow_auto_ct",
+        "name": "Esperar X min (variable)",
+        "pauseType": "delayv",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "outputs": 1,
+        "x": 990,
+        "y": 540,
+        "wires": [
+            [
+                "pn_create",
+                "svc_mobile_notify"
+            ]
+        ]
+    },
+    {
+        "id": "svc_mobile_notify",
+        "type": "api-call-service",
+        "z": "subflow_auto_ct",
+        "name": "NOTIFY (opcional móvil)",
+        "server": "863a80ba.c8027",
+        "version": 7,
+        "debugenabled": false,
+        "action": "notify.notify",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [],
+        "labelId": [],
+        "data": "{{{notify_json}}}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "domain": "notify",
+        "service": "notify",
+        "target": "",
+        "service_domain": "notify",
+        "mergecontext": "",
+        "x": 1370,
+        "y": 480,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "pn_create",
+        "type": "api-call-service",
+        "z": "subflow_auto_ct",
+        "name": "persistent_notification.create",
+        "server": "863a80ba.c8027",
+        "version": 7,
+        "debugenabled": false,
+        "action": "persistent_notification.create",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [],
+        "labelId": [],
+        "data": "{\"title\":\"{{notify.title}}\",\"message\":\"{{notify.message}}\",\"notification_id\":\"{{notify_id}}\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "domain": "persistent_notification",
+        "service": "create",
+        "mergecontext": "",
+        "x": 1380,
+        "y": 600,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "cs_auto_on2",
+        "type": "api-current-state",
+        "z": "subflow_auto_ct",
+        "name": "¿Auto ON?",
+        "server": "863a80ba.c8027",
+        "version": 3,
+        "outputs": 2,
+        "halt_if": "on",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "${AUTO_BOOLEAN}",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [],
+        "for": "",
+        "forType": "num",
+        "override_topic": false,
+        "x": 430,
+        "y": 280,
+        "wires": [
+            [
+                "cs_sun2"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "cs_sun2",
+        "type": "api-current-state",
+        "z": "subflow_auto_ct",
+        "name": "sun.sun",
+        "server": "863a80ba.c8027",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "entity_id": "sun.sun",
+        "state_type": "str",
+        "blockInputOverrides": false,
+        "outputProperties": [
+            {
+                "property": "payload",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            },
+            {
+                "property": "data",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entity"
+            }
+        ],
+        "for": "",
+        "forType": "num",
+        "override_topic": false,
+        "x": 420,
+        "y": 340,
+        "wires": [
+            [
+                "ch_set_elev2"
+            ]
+        ]
+    },
+    {
+        "id": "ch_set_elev2",
+        "type": "change",
+        "z": "subflow_auto_ct",
+        "name": "msg.elev = sun.attributes.elevation",
+        "rules": [
+            {
+                "t": "set",
+                "p": "elev",
+                "pt": "msg",
+                "to": "data.attributes.elevation",
+                "tot": "msg"
+            }
+        ],
+        "x": 720,
+        "y": 280,
+        "wires": [
+            [
+                "fn_calc_ct2"
+            ]
+        ]
+    },
+    {
+        "id": "fn_calc_ct2",
+        "type": "function",
+        "z": "subflow_auto_ct",
+        "name": "Calcular CT desde elevación",
+        "func": "const minK = Number(env.get('MIN_K')) || 2200;\nconst maxK = Number(env.get('MAX_K')) || 6200;\nconst transition = Number(env.get('TRANSITION_SEC')) || 2;\n\n// 1) Curva ideal -> mireds\nconst elev = Number(msg.elev);\nlet k;\nif (isNaN(elev)) { k = (minK + maxK) / 2; }\nelse if (elev <= -6) { k = minK; }\nelse if (elev >= 60) { k = maxK; }\nelse { const n = (elev + 6) / (60 + 6); k = minK + n * (maxK - minK); }\nlet ct = Math.round(1000000 / k);\n\n// 2) CLAMP a capacidades de la bombilla (mismo bloque que en A)\nconst ent = env.get('LIGHT_ENTITY');\nconst evAttrs = msg?.data?.new_state?.attributes || {};\nlet minM = evAttrs.min_mireds;\nlet maxM = evAttrs.max_mireds;\n\nif ((typeof minM !== 'number' || typeof maxM !== 'number') &&\n    typeof evAttrs.min_color_temp_kelvin === 'number' &&\n    typeof evAttrs.max_color_temp_kelvin === 'number') {\n    minM = Math.round(1000000 / evAttrs.max_color_temp_kelvin);\n    maxM = Math.round(1000000 / evAttrs.min_color_temp_kelvin);\n}\nif (typeof minM !== 'number' || typeof maxM !== 'number') {\n    const r = flow.get(`ctRange.${ent}`);\n    if (r) { minM = r.min_mireds; maxM = r.max_mireds; }\n}\nif (typeof minM === 'number' && typeof maxM === 'number') {\n    ct = Math.max(minM, Math.min(maxM, ct));\n    flow.set(`ctRange.${ent}`, {\n        min_mireds: minM,\n        max_mireds: maxM,\n        min_kelvin: Math.round(1000000 / maxM),\n        max_kelvin: Math.round(1000000 / minM),\n    });\n}\n\n// 3) Guarda último CT y lanza comando\ncontext.set('last_ct', ct);\nmsg.data = { color_temp: ct, transition };\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 800,
+        "y": 340,
+        "wires": [
+            [
+                "svc_set_ct"
+            ]
+        ]
+    },
+    {
+        "id": "ev_mobile_action",
+        "type": "server-events",
+        "z": "subflow_auto_ct",
+        "name": "Acción notificación móvil",
+        "server": "863a80ba.c8027",
+        "version": 3,
+        "exposeAsEntityConfig": "",
+        "eventType": "mobile_app_notification_action",
+        "eventData": "",
+        "waitForRunning": false,
+        "outputProperties": [
+            {
+                "property": "payload",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "eventData"
+            },
+            {
+                "property": "topic",
+                "propertyType": "msg",
+                "value": "$outputData(\"eventData\").event_type",
+                "valueType": "jsonata"
+            },
+            {
+                "property": "event_type",
+                "propertyType": "msg",
+                "value": "$outputData(\"eventData\").event_type",
+                "valueType": "jsonata"
+            }
+        ],
+        "x": 190,
+        "y": 720,
+        "wires": [
+            [
+                "sw_action_auto"
+            ]
+        ]
+    },
+    {
+        "id": "sw_action_auto",
+        "type": "switch",
+        "z": "subflow_auto_ct",
+        "name": "¿action == ACTION_AUTO?",
+        "property": "payload.event.action",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "ACTION_AUTO",
+                "vt": "env"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 500,
+        "y": 720,
+        "wires": [
+            [
+                "svc_auto_on"
+            ]
+        ]
+    },
+    {
+        "id": "svc_auto_on",
+        "type": "api-call-service",
+        "z": "subflow_auto_ct",
+        "name": "input_boolean.turn_on (volver a Auto)",
+        "server": "863a80ba.c8027",
+        "version": 7,
+        "debugenabled": false,
+        "action": "input_boolean.turn_on",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [
+            "${AUTO_BOOLEAN}"
+        ],
+        "labelId": [],
+        "data": "",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "domain": "input_boolean",
+        "service": "turn_on",
+        "mergecontext": "",
+        "x": 820,
+        "y": 720,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "3b59de955c718e6c",
+        "type": "function",
+        "z": "subflow_auto_ct",
+        "name": "Solo si OFF→ON",
+        "func": "// Soporta old/new en msg.data o msg.payload según versión del nodo HA\nconst get = (o, p, d = undefined) => p.split('.').reduce((a, k) => (a && a[k] !== undefined) ? a[k] : undefined, o) ?? d;\n\nconst os = get(msg, 'data.old_state') || get(msg, 'payload.old_state') || {};\nconst ns = get(msg, 'data.new_state') || get(msg, 'payload.new_state') || {};\n\n// Dejar pasar SOLO transición OFF -> ON\nif (os.state !== 'on' && ns.state === 'on') {\n    return msg;\n}\nreturn null; // Bloquea cambios de atributos con la luz ya encendida\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 190,
+        "y": 340,
+        "wires": [
+            [
+                "cs_auto_on2"
+            ]
+        ]
+    },
+    {
+        "id": "3237c0bc944ed24f",
+        "type": "server-state-changed",
+        "z": "subflow_auto_ct",
+        "name": "Si se enciende la luz",
+        "server": "863a80ba.c8027",
+        "version": 6,
+        "outputs": 2,
+        "exposeAsEntityConfig": "",
+        "entities": {
+            "entity": [
+                "${LIGHT_ENTITY}"
+            ],
+            "substring": [],
+            "regex": []
+        },
+        "outputInitially": false,
+        "stateType": "str",
+        "ifState": "on",
+        "ifStateType": "str",
+        "ifStateOperator": "is",
+        "outputOnlyOnStateChange": false,
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "ignorePrevStateNull": false,
+        "ignorePrevStateUnknown": false,
+        "ignorePrevStateUnavailable": false,
+        "ignoreCurrentStateUnknown": false,
+        "ignoreCurrentStateUnavailable": false,
+        "outputProperties": [
+            {
+                "property": "payload",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            },
+            {
+                "property": "data",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "eventData"
+            },
+            {
+                "property": "topic",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "triggerId"
+            }
+        ],
+        "x": 190,
+        "y": 280,
+        "wires": [
+            [
+                "3b59de955c718e6c"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "044b0f08e66b9465",
+        "type": "server-state-changed",
+        "z": "subflow_auto_ct",
+        "name": "Cambios en luz (cualquier atributo)",
+        "server": "863a80ba.c8027",
+        "version": 6,
+        "outputs": 1,
+        "exposeAsEntityConfig": "",
+        "entities": {
+            "entity": [
+                "${LIGHT_ENTITY}"
+            ],
+            "substring": [],
+            "regex": []
+        },
+        "outputInitially": false,
+        "stateType": "str",
+        "ifState": "",
+        "ifStateType": "str",
+        "ifStateOperator": "is",
+        "outputOnlyOnStateChange": false,
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "ignorePrevStateNull": false,
+        "ignorePrevStateUnknown": false,
+        "ignorePrevStateUnavailable": false,
+        "ignoreCurrentStateUnknown": false,
+        "ignoreCurrentStateUnavailable": false,
+        "outputProperties": [
+            {
+                "property": "payload",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            },
+            {
+                "property": "data",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "eventData"
+            },
+            {
+                "property": "topic",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "triggerId"
+            }
+        ],
+        "x": 240,
+        "y": 480,
+        "wires": [
+            [
+                "fn_detect_manual",
+                "d92200f14264ae57"
+            ]
+        ]
+    },
+    {
+        "id": "d92200f14264ae57",
+        "type": "function",
+        "z": "subflow_auto_ct",
+        "name": "min max red",
+        "func": "const ent = env.get('LIGHT_ENTITY');\nconst attrs = msg?.data?.new_state?.attributes || {};\n\nconst minK = attrs.min_color_temp_kelvin;\nconst maxK = attrs.max_color_temp_kelvin;\n\nif (typeof minK === 'number' && typeof maxK === 'number') {\n    flow.set(`ctRange.${ent}`, {\n        min_mireds: Math.round(1000000 / maxK), // Para tus otros scripts viejos\n        max_mireds: Math.round(1000000 / minK),\n        min_kelvin: minK,\n        max_kelvin: maxK\n    });\n}\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 170,
+        "y": 420,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "012e6d5bc84cf863",
+        "type": "function",
+        "z": "subflow_auto_ct",
+        "name": "min max red",
+        "func": "const keys = flow.keys(); // todas las claves del store por defecto\nconst dump = {};\nfor (const k of keys) {\n    dump[k] = flow.get(k); // lee cada valor\n}\nmsg.payload = dump;\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 130,
+        "y": 40,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "ev_auto_on_patch",
+        "type": "server-state-changed",
+        "z": "subflow_auto_ct",
+        "name": "Al volver a Auto (ON)",
+        "server": "863a80ba.c8027",
+        "version": 6,
+        "outputs": 2,
+        "exposeAsEntityConfig": "",
+        "entities": {
+            "entity": [
+                "${AUTO_BOOLEAN}"
+            ],
+            "substring": [],
+            "regex": []
+        },
+        "outputInitially": false,
+        "stateType": "str",
+        "ifState": "on",
+        "ifStateType": "str",
+        "ifStateOperator": "is",
+        "outputOnlyOnStateChange": false,
+        "for": "",
+        "forType": "num",
+        "ignorePrevStateNull": false,
+        "ignorePrevStateUnknown": false,
+        "ignorePrevStateUnavailable": false,
+        "ignoreCurrentStateUnknown": false,
+        "ignoreCurrentStateUnavailable": false,
+        "outputProperties": [],
+        "x": 1400,
+        "y": 660,
+        "wires": [
+            [
+                "fn_reset_build_id"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "fn_reset_build_id",
+        "type": "function",
+        "z": "subflow_auto_ct",
+        "name": "reset + notify_id",
+        "func": "// Construir un ID estable para identificar/limpiar la notificación\nconst raw = (env.get('LIGHT_ENTITY') || env.get('FRIENDLY_NAME') || 'auto_ct').toString();\nmsg.notify_id = raw.replace(/[^a-zA-Z0-9_]/g, '_');\n// Señal para resetear la cola del delay\nmsg.reset = true;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 1680,
+        "y": 660,
+        "wires": [
+            [
+                "svc_pn_dismiss",
+                "delay_var",
+                "svc_mobile_clear"
+            ]
+        ]
+    },
+    {
+        "id": "svc_mobile_clear",
+        "type": "api-call-service",
+        "z": "subflow_auto_ct",
+        "name": "NOTIFY clear (opcional)",
+        "server": "863a80ba.c8027",
+        "version": 7,
+        "debugenabled": false,
+        "action": "notify.notify",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [],
+        "labelId": [],
+        "data": "{\"message\":\"clear_notification\",\"data\":{\"tag\":\"{{notify_id}}\"}}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "domain": "notify",
+        "service": "notify",
+        "mergecontext": "",
+        "x": 1710,
+        "y": 720,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "svc_pn_dismiss",
+        "type": "api-call-service",
+        "z": "subflow_auto_ct",
+        "name": "persistent_notification.dismiss",
+        "server": "863a80ba.c8027",
+        "version": 7,
+        "debugenabled": false,
+        "action": "persistent_notification.dismiss",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [],
+        "labelId": [],
+        "data": "{\"notification_id\":\"{{notify_id}}\"}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "domain": "persistent_notification",
+        "service": "dismiss",
+        "mergecontext": "",
+        "x": 1730,
+        "y": 780,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "ad13b624b4a2593c",
+        "type": "function",
+        "z": "subflow_auto_ct",
+        "name": "inject test",
+        "func": "const name = env.get('FRIENDLY_NAME') || env.get('LIGHT_ENTITY') || 'Luz';\nconst rawId = (env.get('LIGHT_ENTITY') || env.get('FRIENDLY_NAME') || 'auto_ct') + '';\nmsg.notify_id = rawId.replace(/[^a-zA-Z0-9_]/g,'_');\n\nconst actionAuto = env.get('ACTION_AUTO') || 'AUTO_ON_CAJA_ESCALERA_CP';\nconst actionKeep = env.get('ACTION_KEEP') || 'KEEP_MANUAL_CAJA_ESCALERA_CP';\n\nmsg.notify = {\n  title: `Temperatura manual en ${name} (TEST)`,\n  message: `Esto es un test de notificación para ${name}.`,\n  data: {\n    tag: msg.notify_id,\n    actions: (actionAuto && actionKeep) ? [\n      { action: actionAuto, title: \"Volver a Auto\" },\n      { action: actionKeep, title: \"Seguir en manual\" }\n    ] : []\n  }\n};\n\n// Pre-serializa para el nodo notify\nmsg.notify_json = JSON.stringify({\n  title: msg.notify.title,\n  message: msg.notify.message,\n  data: msg.notify.data\n});\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1660,
+        "y": 540,
+        "wires": [
+            [
+                "svc_mobile_notify",
+                "pn_create"
+            ]
+        ]
+    },
+    {
+        "id": "34514d71f454a3c0",
+        "type": "switch",
+        "z": "subflow_auto_ct",
+        "name": "",
+        "property": "payload",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "testNot",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "clearNot",
+                "vt": "str"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 1310,
+        "y": 100,
+        "wires": [
+            [
+                "ad13b624b4a2593c"
+            ],
+            [
+                "fn_reset_build_id"
+            ]
+        ]
+    },
+    {
+        "id": "863a80ba.c8027",
+        "type": "server",
+        "name": "Home Assistant",
+        "version": 6,
+        "addon": false,
+        "rejectUnauthorizedCerts": false,
+        "ha_boolean": [
+            "y",
+            "yes",
+            "true",
+            "on",
+            "home",
+            "open"
+        ],
+        "connectionDelay": true,
+        "cacheJson": false,
+        "heartbeat": true,
+        "heartbeatInterval": "30",
+        "areaSelector": "friendlyName",
+        "deviceSelector": "friendlyName",
+        "entitySelector": "id",
+        "statusSeparator": "at: ",
+        "statusYear": "hidden",
+        "statusMonth": "short",
+        "statusDay": "numeric",
+        "statusHourCycle": "h23",
+        "statusTimeFormat": "h:m",
+        "enableGlobalContextStore": true
+    },
+    {
+        "id": "e0eb009348d451da",
+        "type": "inject",
+        "z": "tab_main",
+        "name": "Cada 5 min (y al arrancar)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "300",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "3",
+        "topic": "",
+        "x": 220,
+        "y": 80,
+        "wires": [
+            [
+                "inst_pasillo",
+                "inst_cocina",
+                "inst_salon",
+                "inst_bano",
+                "inst_vestidor",
+                "inst_sala_estar",
+                "inst_dormitorio_extra",
+                "inst_caja_escalera",
+                "4ced7a864451a17d",
+                "93de2d933a695259",
+                "05fdf51bc130bf41",
+                "5147a33e8f20862a",
+                "af44d2d0665684d0",
+                "966c9b45da854731",
+                "ecbb85e5a39c2972",
+                "69b06c6a19449ee7"
+            ]
+        ]
+    },
+    {
+        "id": "inst_pasillo",
+        "type": "subflow:subflow_auto_ct",
+        "z": "tab_main",
+        "name": "Pasillo Largo (CG)",
+        "env": [
+            {
+                "name": "LIGHT_ENTITY",
+                "value": "light.pasillo_grupo",
+                "type": "str"
+            },
+            {
+                "name": "AUTO_BOOLEAN",
+                "value": "input_boolean.auto_temp_pasillo_largo",
+                "type": "str"
+            },
+            {
+                "name": "FRIENDLY_NAME",
+                "value": "Pasillo Largo",
+                "type": "str"
+            },
+            {
+                "name": "ACTION_AUTO",
+                "value": "AUTO_ON_PASILLO_LARGO",
+                "type": "str"
+            },
+            {
+                "name": "ACTION_KEEP",
+                "value": "KEEP_MANUAL_PASILLO_LARGO",
+                "type": "str"
+            },
+            {
+                "name": "MIN_K",
+                "value": "2200",
+                "type": "num"
+            },
+            {
+                "name": "MAX_K",
+                "value": "6200",
+                "type": "num"
+            },
+            {
+                "name": "TRANSITION_SEC",
+                "value": "2",
+                "type": "num"
+            },
+            {
+                "name": "CT_THRESHOLD",
+                "value": "10",
+                "type": "num"
+            },
+            {
+                "name": "MANUAL_THRESHOLD",
+                "value": "20",
+                "type": "num"
+            }
+        ],
+        "x": 250,
+        "y": 160,
+        "wires": []
+    },
+    {
+        "id": "9924d2ad7458f389",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-contrib-home-assistant-websocket": "0.80.3"
+        }
+    }
+]
