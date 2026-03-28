@@ -1,0 +1,259 @@
+[
+    {
+        "id": "s_ev_all_lights",
+        "type": "server-state-changed",
+        "z": "tab_main",
+        "name": "Cambios en luces (todas)",
+        "server": "863a80ba.c8027",
+        "version": 6,
+        "outputs": 1,
+        "exposeAsEntityConfig": "",
+        "entities": {
+            "entity": [
+                "light.pasillo_grupo",
+                "light.cocina_pequena",
+                "light.salon_grupo",
+                "light.luz_atenuable_grupo_espejo_00_01_00_bano_grande_casa_grande",
+                "light.bano_grande_techo",
+                "light.vestidor_grupo",
+                "light.dormitorio_extra",
+                "light.luz_todas_las_luces_00_01_00_sala_de_estar_casa_pequena",
+                "light.luz_todas_las_luces_00_01_00_caja_de_escalera_casa_pequena",
+                "light.luz_todas_las_luces_00_01_00_azotea_exterior"
+            ],
+            "substring": [],
+            "regex": []
+        },
+        "outputInitially": false,
+        "stateType": "str",
+        "ifState": "",
+        "ifStateType": "str",
+        "ifStateOperator": "is",
+        "outputOnlyOnStateChange": false,
+        "for": "",
+        "forType": "num",
+        "ignorePrevStateNull": false,
+        "ignorePrevStateUnknown": false,
+        "ignorePrevStateUnavailable": false,
+        "ignoreCurrentStateUnknown": false,
+        "ignoreCurrentStateUnavailable": false,
+        "outputProperties": [
+            {
+                "property": "payload",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            },
+            {
+                "property": "data",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "eventData"
+            },
+            {
+                "property": "topic",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "triggerId"
+            }
+        ],
+        "x": 670,
+        "y": 80,
+        "wires": [
+            [
+                "f_boost_logic"
+            ]
+        ]
+    },
+    {
+        "id": "f_boost_logic",
+        "type": "function",
+        "z": "tab_main",
+        "name": "OFF→ON + ≥08:00 + 1ª vez",
+        "func": "// CONFIGURABLE\nconst RESET_HOUR = 8; // 8 = 08:00 local\nconst ALLOWED = new Set([\n    'light.pasillo_grupo',\n    'light.cocina_pequena',\n    'light.salon_grupo',\n    'light.luz_atenuable_grupo_espejo_00_01_00_bano_grande_casa_grande',\n    'light.bano_grande_techo',\n    'light.vestidor_grupo',\n    'light.dormitorio_extra',\n    'light.luz_todas_las_luces_00_01_00_sala_de_estar_casa_pequena',\n    'light.luz_todas_las_luces_00_01_00_caja_de_escalera_casa_pequena',\n]);\n\n// Evento HA\nconst os = msg.data?.old_state || {};\nconst ns = msg.data?.new_state || {};\nconst ent = ns.entity_id || os.entity_id;\n//if (!ALLOWED.has(ent)) return null; // en lista\n\n// OFF -> ON real\nif (!(os.state !== 'on' && ns.state === 'on')) return null;\n\n// Hora local >= RESET_HOUR\nconst now = new Date();\nif (now.getHours() < RESET_HOUR) return null;\n\n// Primera vez del día\nconst pad = n => String(n).padStart(2,'0');\nconst today = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;\nconst dateKey = `boost.${ent}.date`;\nconst last = flow.get(dateKey);\nmsg._boost = { ent, dateKey, today };\nif (last === today) return null; // ya hecho hoy\n\n// ¿Brillo actual?\nconst attrs = ns.attributes || {};\nlet pct = attrs.brightness_pct;\nif (typeof pct !== 'number' && typeof attrs.brightness === 'number') {\n  pct = Math.round(attrs.brightness * 100 / 255);\n}\n\n// Construye salidas\nif (typeof pct === 'number') {\n  msg.payload = { entity_id: ent, brightness_pct: 100, transition: 1 };\n  return [ msg, null ]; // Salida 1: forzar 100%\n}\n// No regulable o ya al 100%: solo marcar día\nreturn [ null, msg ]; // Salida 2: marcar\n",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 940,
+        "y": 80,
+        "wires": [
+            [
+                "350f10a465587415",
+                "096e23751cd0d560"
+            ],
+            [
+                "f_mark_done",
+                "27b887b92e31720d"
+            ]
+        ]
+    },
+    {
+        "id": "svc_to_100",
+        "type": "api-call-service",
+        "z": "tab_main",
+        "name": "light.turn_on → 100%",
+        "server": "863a80ba.c8027",
+        "version": 7,
+        "debugenabled": false,
+        "action": "light.turn_on",
+        "floorId": [],
+        "areaId": [],
+        "deviceId": [],
+        "entityId": [],
+        "labelId": [],
+        "data": "{\"entity_id\":\"{{payload.entity_id}}\",\"brightness_pct\":{{payload.brightness_pct}},\"transition\":{{payload.transition}}}",
+        "dataType": "json",
+        "mergeContext": "",
+        "mustacheAltTags": false,
+        "outputProperties": [],
+        "queue": "none",
+        "blockInputOverrides": false,
+        "domain": "light",
+        "service": "turn_on",
+        "mergecontext": "",
+        "x": 1400,
+        "y": 40,
+        "wires": [
+            [
+                "f_mark_done"
+            ]
+        ]
+    },
+    {
+        "id": "f_mark_done",
+        "type": "function",
+        "z": "tab_main",
+        "name": "Marcar día hecho",
+        "func": "const b = msg._boost || {};\nif (b.dateKey && b.today) {\n  flow.set(b.dateKey, b.today);\n  node.status({ text: `${b.ent} ✔ ${b.today}` });\n}\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1250,
+        "y": 120,
+        "wires": [
+            [
+                "d_tap"
+            ]
+        ]
+    },
+    {
+        "id": "d_tap",
+        "type": "debug",
+        "z": "tab_main",
+        "name": "DEBUG entradas",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1510,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "27b887b92e31720d",
+        "type": "debug",
+        "z": "tab_main",
+        "name": "DEBUG B",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1220,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "350f10a465587415",
+        "type": "debug",
+        "z": "tab_main",
+        "name": "DEBUG A",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1220,
+        "y": 200,
+        "wires": []
+    },
+    {
+        "id": "096e23751cd0d560",
+        "type": "delay",
+        "z": "tab_main",
+        "name": "",
+        "pauseType": "delay",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 1220,
+        "y": 40,
+        "wires": [
+            [
+                "svc_to_100"
+            ]
+        ]
+    },
+    {
+        "id": "863a80ba.c8027",
+        "type": "server",
+        "name": "Home Assistant",
+        "version": 6,
+        "addon": false,
+        "rejectUnauthorizedCerts": false,
+        "ha_boolean": [
+            "y",
+            "yes",
+            "true",
+            "on",
+            "home",
+            "open"
+        ],
+        "connectionDelay": true,
+        "cacheJson": false,
+        "heartbeat": true,
+        "heartbeatInterval": "30",
+        "areaSelector": "friendlyName",
+        "deviceSelector": "friendlyName",
+        "entitySelector": "id",
+        "statusSeparator": "at: ",
+        "statusYear": "hidden",
+        "statusMonth": "short",
+        "statusDay": "numeric",
+        "statusHourCycle": "h23",
+        "statusTimeFormat": "h:m",
+        "enableGlobalContextStore": true
+    },
+    {
+        "id": "d391df09f737df8e",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-contrib-home-assistant-websocket": "0.80.3"
+        }
+    }
+]
